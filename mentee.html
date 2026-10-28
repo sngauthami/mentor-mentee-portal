@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mentee</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><h1 id="who">Mentee</h1><button class="secondary" onclick="logout()">Log out</button></header>
+<main>
+<section><h2>My mentor</h2>
+  <select id="mentor"></select><button onclick="saveMentor()">Save mentor</button></section>
+<section><h2>My marks</h2>
+  <input id="subject" placeholder="Subject"><input id="score" type="number" min="0" max="100" placeholder="Marks out of 100">
+  <button onclick="addMarks()">Add marks</button>
+  <table><thead><tr><th>Subject</th><th>Marks</th></tr></thead><tbody id="marks"></tbody></table></section>
+<section><h2>Notes from my mentor</h2><ul id="notes"></ul></section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script>
+let me;
+(async () => {
+  me = await requireRole("mentee"); if (!me) return;
+  $("who").textContent = "Hi, " + me.name;
+  const { data: mentors } = await db.from("profiles").select("id,name").eq("role", "mentor");
+  $("mentor").innerHTML = '<option value="">Choose your mentor</option>' + (mentors || []).map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join("");
+  $("mentor").value = me.mentor_id || "";
+  load();
+})();
+async function saveMentor() {
+  const { error } = await db.from("profiles").update({ mentor_id: $("mentor").value || null }).eq("id", me.id);
+  alert(error ? error.message : "Mentor saved");
+}
+async function addMarks() {
+  if (!$("subject").value.trim() || $("score").value === "") return alert("Fill subject and marks.");
+  const { error } = await db.from("marks").insert({ mentee_id: me.id, subject: $("subject").value.trim(), marks: +$("score").value });
+  if (error) return alert(error.message);
+  $("subject").value = ""; $("score").value = ""; load();
+}
+async function load() {
+  const { data: m } = await db.from("marks").select("*").eq("mentee_id", me.id).order("id");
+  $("marks").innerHTML = (m || []).map(r => `<tr><td>${esc(r.subject)}</td><td>${r.marks}</td></tr>`).join("") || "<tr><td colspan=2>No marks added yet.</td></tr>";
+  const { data: n } = await db.from("notes").select("*").eq("mentee_id", me.id).order("id", { ascending: false });
+  $("notes").innerHTML = (n || []).map(x => `<li>${esc(x.note)} ${x.seen ? "<small>(seen)</small>" : ""}${fileBtn(x)}</li>`).join("") || "<li>No notes yet.</li>";
+  await db.from("notes").update({ seen: true }).eq("mentee_id", me.id).eq("seen", false);
+}
+
+const fileBtn = (x) => x.file_path ? `<br><button class="secondary" onclick="openFile('${x.file_path}')">${esc(x.file_name)}</button>` : "";
+async function openFile(path) {
+  const w = window.open("", "_blank");
+  const { data, error } = await db.storage.from("note-files").createSignedUrl(path, 60);
+  if (error) { if (w) w.close(); return alert(error.message); }
+  w.location = data.signedUrl;
+}
+</script></body></html>

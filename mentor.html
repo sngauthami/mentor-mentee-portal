@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mentor</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><h1 id="who">Mentor</h1><button class="secondary" onclick="logout()">Log out</button></header>
+<main>
+<section><h2>My mentees</h2><div id="mentees" class="mentees"></div></section>
+<section id="detail" hidden>
+  <h2 id="mname"></h2>
+  <table><thead><tr><th>Subject</th><th>Marks</th></tr></thead><tbody id="marks"></tbody></table>
+  <h2 style="margin-top:1rem">Notes and recommendations</h2>
+  <ul id="notes"></ul>
+  <textarea id="note" rows="3" placeholder="Write a note or recommendation"></textarea>
+  <label>Attach a PDF (optional, max 5 MB)<input id="file" type="file" accept="application/pdf"></label>
+  <button onclick="addNote()">Send note</button>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script>
+let me, cur;
+(async () => {
+  me = await requireRole("mentor"); if (!me) return;
+  $("who").textContent = "Hi, " + me.name;
+  const { data } = await db.from("profiles").select("id,name").eq("mentor_id", me.id);
+  $("mentees").innerHTML = (data || []).map(m => `<button data-id="${m.id}" data-name="${esc(m.name)}">${esc(m.name)}</button>`).join("") || "No mentees have picked you yet.";
+  $("mentees").onclick = (e) => { if (e.target.dataset.id) pick(e.target.dataset.id, e.target.dataset.name); };
+})();
+function pick(id, name) { cur = id; $("detail").hidden = false; $("mname").textContent = name; refresh(); }
+async function refresh() {
+  const { data: m } = await db.from("marks").select("*").eq("mentee_id", cur).order("id");
+  $("marks").innerHTML = (m || []).map(r => `<tr><td>${esc(r.subject)}</td><td>${r.marks}</td></tr>`).join("") || "<tr><td colspan=2>No marks yet.</td></tr>";
+  const { data: n } = await db.from("notes").select("*").eq("mentee_id", cur).order("id", { ascending: false });
+  $("notes").innerHTML = (n || []).map(x => `<li>${esc(x.note)} ${x.seen ? "<small>(seen)</small>" : ""}${fileBtn(x)}</li>`).join("") || "<li>No notes yet.</li>";
+}
+async function addNote() {
+  const text = $("note").value.trim(), f = $("file").files[0];
+  if (!text && !f) return;
+  let file_path = null, file_name = null;
+  if (f) {
+    if (f.size > 5 * 1024 * 1024) return alert("PDF must be under 5 MB.");
+    file_path = cur + "/" + Date.now() + "_" + f.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const { error: upErr } = await db.storage.from("note-files").upload(file_path, f, { contentType: "application/pdf" });
+    if (upErr) return alert(upErr.message);
+    file_name = f.name;
+  }
+  const { error } = await db.from("notes").insert({ mentee_id: cur, mentor_id: me.id, note: text || "(PDF attached)", file_path, file_name });
+  if (error) return alert(error.message);
+  $("note").value = ""; $("file").value = ""; refresh();
+}
+
+const fileBtn = (x) => x.file_path ? `<br><button class="secondary" onclick="openFile('${x.file_path}')">${esc(x.file_name)}</button>` : "";
+async function openFile(path) {
+  const w = window.open("", "_blank");
+  const { data, error } = await db.storage.from("note-files").createSignedUrl(path, 60);
+  if (error) { if (w) w.close(); return alert(error.message); }
+  w.location = data.signedUrl;
+}
+</script></body></html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mentor-Mentee Portal</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><h1>Mentor-Mentee Portal</h1></header>
+<div class="card login" style="margin-top:1.5rem">
+  <h2>Sign in or create an account</h2>
+  <label>Full name (new accounts only)<input id="fullName"></label>
+  <label>Email<input id="email" type="email"></label>
+  <label>Password (min 6 characters)<input id="password" type="password"></label>
+  <label>I am a<select id="role"><option value="mentee">Mentee (student)</option><option value="mentor">Mentor (faculty)</option><option value="hod">HOD / Admin</option></select></label>
+  <button onclick="login()">Sign in</button>
+  <button class="secondary" onclick="register()">Create account</button>
+  <p id="msg" class="error"></p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script>
+const go = (role) => location.href = role + ".html";
+async function login() {
+  const { data, error } = await db.auth.signInWithPassword({ email: $("email").value, password: $("password").value });
+  if (error) return $("msg").textContent = error.message;
+  const { data: p } = await db.from("profiles").select("role").eq("id", data.user.id).single();
+  if (!p) return $("msg").textContent = "No profile found. Create an account first.";
+  go(p.role);
+}
+async function register() {
+  if (!$("fullName").value.trim()) return $("msg").textContent = "Enter your full name.";
+  const { data, error } = await db.auth.signUp({ email: $("email").value, password: $("password").value });
+  if (error) return $("msg").textContent = error.message;
+  if (!data.session) return $("msg").textContent = "Confirm your email, then sign in.";
+  const { error: e2 } = await db.from("profiles").insert({ id: data.user.id, name: $("fullName").value.trim(), role: $("role").value });
+  if (e2) return $("msg").textContent = e2.message;
+  go($("role").value);
+}
+</script></body></html>

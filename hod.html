@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HOD</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><h1 id="who">HOD</h1><button class="secondary" onclick="logout()">Log out</button></header>
+<main><section><h2>All mentees</h2>
+<table><thead><tr><th>Mentee</th><th>Mentor</th><th>Marks</th><th>Average</th><th>Notes</th></tr></thead><tbody id="rows"></tbody></table></section></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script>
+(async () => {
+  const me = await requireRole("hod"); if (!me) return;
+  $("who").textContent = "Hi, " + me.name;
+  const [{ data: ps }, { data: ms }, { data: ns }] = await Promise.all([db.from("profiles").select("*"), db.from("marks").select("*"), db.from("notes").select("*")]);
+  const nameOf = (id) => (ps.find(p => p.id === id) || {}).name || "Not chosen";
+  $("rows").innerHTML = ps.filter(p => p.role === "mentee").map(p => {
+    const mk = ms.filter(m => m.mentee_id === p.id);
+    const avg = mk.length ? (mk.reduce((a, b) => a + b.marks, 0) / mk.length).toFixed(1) : "-";
+    return `<tr><td>${esc(p.name)}</td><td>${esc(nameOf(p.mentor_id))}</td><td>${mk.map(m => esc(m.subject) + ": " + m.marks).join(", ") || "-"}</td><td>${avg}</td><td>${ns.filter(n => n.mentee_id === p.id).length}</td></tr>`;
+  }).join("") || "<tr><td colspan=5>No mentees yet.</td></tr>";
+})();
+</script></body></html>
